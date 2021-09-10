@@ -1,0 +1,5 @@
+today - List new freebies for today
+yesterday - List new freebies since yesterday
+week - List new freebies 1 week
+month - List new freebies 30 days
+receive - Toggle posting of new freebies
