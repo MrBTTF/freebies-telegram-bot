@@ -105,6 +105,7 @@ func (b *Bot) Run() {
 					log.Println(err)
 				}
 			}
+		case "":
 		default:
 			err = b.SendMsgWithMarkdown(update.Message.Chat.ID, "Unknown command 🧐\\. Type _*/*_")
 			if err != nil {
