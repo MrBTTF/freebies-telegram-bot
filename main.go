@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -79,6 +80,19 @@ func setupServer(bot *Bot, storage *Storage) {
 			return
 		}
 		message := r.FormValue("message")
+		chatIDStr := r.FormValue("chat_id")
+		if chatIDStr != "" {
+			chatID, err := strconv.Atoi(chatIDStr)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(err.Error()))
+				return
+			}
+			log.Println("Message sent to ", chatID)
+			bot.SendMsg(int64(chatID), message)
+			return
+		}
+
 		subscribers, err := storage.ReadSubscribers()
 		if err != nil {
 			log.Println(err)
