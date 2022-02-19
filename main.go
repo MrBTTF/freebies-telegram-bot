@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"sort"
@@ -10,18 +11,23 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+
+	cloudflarebp "github.com/DaRealFreak/cloudflare-bp-go"
 )
 
 const (
-	WEB_URL   = "https://pikabu.ru/tag/%D0%A5%D0%B0%D0%BB%D1%8F%D0%B2%D0%B0/hot?cl=steam"
+	WEB_URL = "https://pikabu.ru/tag/%D0%A5%D0%B0%D0%BB%D1%8F%D0%B2%D0%B0/hot?cl=steam"
 )
 
-type PikabuFetcher struct{
+var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 
+type PikabuFetcher struct {
 }
 
 func (pf PikabuFetcher) Fetch(sinceTime time.Time) ([]string, error) {
-	res, err := http.Get(WEB_URL)
+	client := &http.Client{}
+	client.Transport = cloudflarebp.AddCloudFlareByPass(client.Transport)
+	res, err := client.Get(WEB_URL)
 	if err != nil {
 		return []string{}, err
 	}
@@ -46,7 +52,7 @@ func (pf PikabuFetcher) Fetch(sinceTime time.Time) ([]string, error) {
 		date, err := time.Parse(time.RFC3339, datetime)
 		if err != nil {
 			log.Println(err)
-			return 
+			return
 		}
 		if !date.After(sinceTime) {
 			return

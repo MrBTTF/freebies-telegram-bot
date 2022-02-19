@@ -14,14 +14,14 @@ var (
 	ApiToken string
 )
 
-type LinksFetcher interface{
+type LinksFetcher interface {
 	Fetch(time.Time) ([]string, error)
 }
 
 type Bot struct {
 	botApi  *tgbotapi.BotAPI
 	storage *Storage
-	links LinksFetcher
+	links   LinksFetcher
 }
 
 func NewBot(storage *Storage, links LinksFetcher) (*Bot, error) {
@@ -37,7 +37,7 @@ func NewBot(storage *Storage, links LinksFetcher) (*Bot, error) {
 	return &Bot{
 		botApi:  bot,
 		storage: storage,
-		links: links,
+		links:   links,
 	}, nil
 }
 
@@ -132,7 +132,7 @@ func (b *Bot) WatchNewPosts() {
 			go func() {
 				defer wg.Done()
 
-				links, err := b.links.Fetch(s.LastPost) 
+				links, err := b.links.Fetch(s.LastPost)
 				if err != nil {
 					log.Println(err)
 					return
@@ -150,7 +150,7 @@ func (b *Bot) WatchNewPosts() {
 
 			}()
 		}
-		time.Sleep(1 * time.Minute)
+		time.Sleep(time.Duration(rnd.Intn(60*4)+60) * time.Second)
 		wg.Wait()
 	}
 }
