@@ -2,17 +2,16 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"strconv"
 	"time"
 
-	"google.golang.org/api/sheets/v4"
+	"database/sql"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
-const (
-	SPREADSHEET_ID = "11ZWtDmKXFODksqeD61gaqYa9J6x2_WtBqs3iRR56jVs"
-)
-
+type Scanable interface {
+	Scan(dest ...any) error
+}
 
 type Subscriber struct {
 	ChatID   int64
@@ -20,119 +19,122 @@ type Subscriber struct {
 }
 
 type Storage struct {
-	client *sheets.Service
+	db *sql.DB
 }
 
-func NewStorage(sheetClient *sheets.Service) *Storage {
+func NewStorage(db *sql.DB) *Storage {
 	return &Storage{
-		client: sheetClient,
+		db: db,
 	}
 }
 
-func (s *Storage) PersistSubscriber(index int, chatId int64, sinceTime time.Time) error {
-	var vr sheets.ValueRange
-	vr.MajorDimension = "COLUMNS"
-	chatIdVal := []interface{}{chatId}
+const InsertSubscriberQuery = `
+INSERT OR IGNORE INTO subscribers(chat_id, last_post) values(?,?)
+`
 
+func (s *Storage) StoreSubscriber(chatId int64, sinceTime time.Time) error {
 	sinceTimeStr := sinceTime.Format(time.RFC3339)
-	sinceTimeVal := []interface{}{sinceTimeStr}
+	_, err := s.db.Exec(InsertSubscriberQuery, chatId, sinceTimeStr)
 
-	vr.Values = append(vr.Values, chatIdVal, sinceTimeVal)
-
-	var err error
-	if index != -1 {
-		readRange := fmt.Sprintf("Subscribers!A%d", index+1)
-		_, err = s.client.Spreadsheets.Values.
-			Update(SPREADSHEET_ID, readRange, &vr).
-			ValueInputOption("RAW").Do()
-	} else {
-		readRange := "Subscribers"
-		_, err = s.client.Spreadsheets.Values.
-			Append(SPREADSHEET_ID, readRange, &vr).
-			ValueInputOption("RAW").Do()
+	if err != nil {
+		return fmt.Errorf("Unable to store last post %s for chat_id %d: %w", sinceTimeStr, chatId, err)
 	}
-	return err
+
+	return nil
 }
 
-func (s *Storage) DeleteSubscriber(index int) error {
-	_, err := s.client.Spreadsheets.BatchUpdate(
-		SPREADSHEET_ID,
-		&sheets.BatchUpdateSpreadsheetRequest{
-			Requests: []*sheets.Request{
-				{
-					DeleteDimension: &sheets.DeleteDimensionRequest{
-						Range: &sheets.DimensionRange{
-							Dimension:  "ROWS",
-							StartIndex: int64(index),
-							EndIndex:   int64(index + 1),
-						},
-					},
-				},
-			},
-		},
-	).Do()
-	return err
+const UpdateLastPostQuery = `
+UPDATE subscribers SET last_post = ? where chat_id = ?
+`
+
+func (s *Storage) UpdateLastPost(chatId int64, sinceTime time.Time) error {
+	sinceTimeStr := sinceTime.Format(time.RFC3339)
+
+	_, err := s.db.Exec(UpdateLastPostQuery, sinceTimeStr, chatId)
+
+	if err != nil {
+		return fmt.Errorf("Unable to store last post %s for chat_id %d: %w", sinceTimeStr, chatId, err)
+	}
+
+	return nil
 }
 
-func (s *Storage) ClearSubscribers() error {
-	readRange := "Subscribers!A:B"
-	_, err := s.client.Spreadsheets.Values.Clear(SPREADSHEET_ID, readRange, &sheets.ClearValuesRequest{}).Do()
-	return err
+const DeleteSubscriberQuery = `
+DELETE FROM subscribers WHERE chat_id = ?
+`
+
+func (s *Storage) DeleteSubscriber(chatId int) error {
+	_, err := s.db.Exec(DeleteSubscriberQuery, chatId)
+	if err != nil {
+		return fmt.Errorf("Unable to delete subscriber for chat_id %d: %w", chatId, err)
+	}
+
+	return nil
 }
+
+const SelectSubscribersQuery = `
+SELECT chat_id, last_post FROM subscribers
+`
 
 func (s *Storage) ReadSubscribers() ([]Subscriber, error) {
-	readRange := "Subscribers!A:B"
-	resp, err := s.client.Spreadsheets.Values.Get(SPREADSHEET_ID, readRange).Do()
+	rows, err := s.db.Query(SelectSubscribersQuery)
 	if err != nil {
-		log.Fatalf("Unable to retrieve data from sheet: %v", err)
+		return nil, fmt.Errorf("Unable to read subscribers: %w", err)
 	}
+	defer rows.Close()
 
-	lines := []Subscriber{}
-	for _, row := range resp.Values {
-		if len(row) < 2 {
-			continue
-		}
-		dateStr, ok := row[1].(string)
-		if !ok {
-			continue
-		}
-		date, err := time.Parse(time.RFC3339, dateStr)
-
-		if dateStr == "" {
-			date = time.Now()
-		} else if err != nil {
-			log.Println(err)
-			return nil, err
-		}
-
-		chatID, err := strconv.Atoi(row[0].(string))
+	var subscribers []Subscriber
+	for rows.Next() {
+		subscriber, err := scanSubscriber(rows)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Unable to read subscribers: %w", err)
 		}
 
-		lines = append(lines, Subscriber{
-			int64(chatID),
-			date,
-		})
+		subscribers = append(subscribers, subscriber)
 	}
-	return lines, nil
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("Unable to read subscribers: %w", err)
+	}
+
+	return subscribers, nil
 }
 
-func subscriberExist(chatID int64, subscribers []Subscriber) bool {
-	for _, s := range subscribers {
-		if s.ChatID == chatID {
-			return true
-		}
+const SelectSubscriberQuery = `
+SELECT chat_id, last_post FROM subscribers
+WHERE chat_id = ?
+`
+
+func (s *Storage) GetSubscriber(chatId int) (Subscriber, error) {
+	row := s.db.QueryRow(SelectSubscriberQuery, chatId)
+	subscriber, err := scanSubscriber(row)
+	if err != nil {
+		return Subscriber{}, fmt.Errorf("Unable to get subscriber for chat_id %d: %w", chatId, err)
 	}
-	return false
+
+	return subscriber, nil
 }
 
-func (s *Storage) WriteSubscribers(subscribers []Subscriber) error {
-	for i, sub := range subscribers {
-		err := s.PersistSubscriber(i, sub.ChatID, sub.LastPost)
-		if err != nil {
-			return err
-		}
+func scanSubscriber(row Scanable) (Subscriber, error) {
+	var subscriber Subscriber
+	var lastPostStr string
+
+	err := row.Scan(
+		&subscriber.ChatID,
+		&lastPostStr,
+	)
+	if err != nil {
+		return Subscriber{}, fmt.Errorf("Unable to scan subscriber: %w", err)
 	}
-	return nil
+
+	date, err := time.Parse(time.RFC3339, lastPostStr)
+	if err != nil {
+		return Subscriber{}, fmt.Errorf("Unable to scan subscriber: %w", err)
+	}
+	subscriber.LastPost = date
+
+	if lastPostStr == "" {
+		subscriber.LastPost = time.Now()
+	}
+	return subscriber, nil
 }

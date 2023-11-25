@@ -1,7 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	_ "embed"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -56,19 +58,13 @@ func (b *Bot) Run() {
 		}
 		chatID := int64(update.Message.Chat.ID)
 
-		now := time.Now().Truncate(24 * time.Hour)
+		now := time.Now().UTC().Truncate(24 * time.Hour)
 
 		switch update.Message.Command() {
 		case "start":
-			subscribers, err := b.storage.ReadSubscribers()
+			err = b.storage.StoreSubscriber(chatID, now)
 			if err != nil {
 				log.Println(err)
-			}
-			if !subscriberExist(chatID, subscribers) {
-				err = b.storage.PersistSubscriber(-1, chatID, now)
-				if err != nil {
-					log.Println(err)
-				}
 			}
 
 			b.SendMsgWithMarkdown(update.Message.Chat.ID, "Hey\\! I'll be posting new freebies from steam community on pikabu\\.ru\\. Type _*/*_ to see the list of commands\\. 🙂")
@@ -83,23 +79,23 @@ func (b *Bot) Run() {
 		case "month":
 			b.SendPostsToUser(update.Message.Chat.ID, 31)
 		case "receive":
-			subscribers, err := b.storage.ReadSubscribers()
-			if err != nil {
+			_, err := b.storage.GetSubscriber(int(chatID))
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				log.Println(err)
-			}
-			if subscriberExist(chatID, subscribers) {
-				for i, s := range subscribers {
-					if s.ChatID == chatID {
-						b.storage.DeleteSubscriber(i)
-						break
-					}
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				err = b.storage.DeleteSubscriber(int(chatID))
+				if err != nil {
+					log.Println(err)
 				}
 				err = b.SendMsg(update.Message.Chat.ID, "I won't be posting new freebies anymore. 😐")
 				if err != nil {
 					log.Println(err)
 				}
 			} else {
-				b.storage.PersistSubscriber(-1, chatID, now)
+				err = b.storage.StoreSubscriber(chatID, now)
+				if err != nil {
+					log.Println(err)
+				}
 				err = b.SendMsg(update.Message.Chat.ID, "I'll be posting new freebies from now on as soon as I find some. 😉")
 				if err != nil {
 					log.Println(err)
@@ -122,11 +118,12 @@ func (b *Bot) WatchNewPosts() {
 			log.Println(err)
 			continue
 		}
-		now := time.Now()
+		now := time.Now().UTC()
+
+		//TODO: read posts since the earlierst last_post of a user
 
 		var wg sync.WaitGroup
-		for i, s := range subscribers {
-			i := i
+		for _, s := range subscribers {
 			s := s
 			wg.Add(1)
 			go func() {
@@ -145,7 +142,11 @@ func (b *Bot) WatchNewPosts() {
 				}
 				log.Printf("%d posts send to subscriber: %d", len(links), s.ChatID)
 				if len(links) != 0 {
-					b.storage.PersistSubscriber(i, s.ChatID, now)
+					err = b.storage.UpdateLastPost(s.ChatID, now)
+					if err != nil {
+						log.Println(err)
+						return
+					}
 				}
 
 			}()
@@ -170,7 +171,7 @@ func (b *Bot) SendMsgWithMarkdown(chatId int64, message string) error {
 }
 
 func (b *Bot) SendPostsToUser(chatID int64, sinceDays int) {
-	sinceTime := time.Now().AddDate(0, 0, -sinceDays)
+	sinceTime := time.Now().UTC().AddDate(0, 0, -sinceDays)
 	links, err := b.links.Fetch(sinceTime)
 	if err != nil {
 		log.Println(err)

@@ -1,78 +1,17 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"time"
-
-	"github.com/PuerkitoBio/goquery"
-
-	cloudflarebp "github.com/DaRealFreak/cloudflare-bp-go"
-)
-
-const (
-	WEB_URL = "https://pikabu.ru/tag/%D0%A5%D0%B0%D0%BB%D1%8F%D0%B2%D0%B0/hot?cl=steam"
 )
 
 var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
-
-type PikabuFetcher struct {
-}
-
-func (pf PikabuFetcher) Fetch(sinceTime time.Time) ([]string, error) {
-	client := &http.Client{}
-	client.Transport = cloudflarebp.AddCloudFlareByPass(client.Transport)
-	res, err := client.Get(WEB_URL)
-	if err != nil {
-		return []string{}, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
-	}
-
-	doc, err := goquery.NewDocumentFromReader(res.Body)
-	if err != nil {
-		return []string{}, err
-	}
-
-	links := []string{}
-	doc.Find("article").Each(func(i int, s *goquery.Selection) {
-		datetime, exists := s.Find(".caption.story__datetime.hint").Attr("datetime")
-		if !exists {
-			log.Println("attribute datetime not found")
-			return
-		}
-
-		date, err := time.Parse(time.RFC3339, datetime)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		if !date.After(sinceTime) {
-			return
-		}
-
-		title := s.Find(".story__title")
-		link, exists := title.Find("a").Attr("href")
-		log.Println(link)
-		if !exists {
-			log.Println("attribute href not found")
-			return
-		}
-
-		// TODO: pagination
-		links = append(links, link)
-	})
-
-	sort.Sort(sort.Reverse(sort.StringSlice(links)))
-	return links, nil
-}
 
 func setupServer(bot *Bot, storage *Storage) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -126,15 +65,20 @@ func setupServer(bot *Bot, storage *Storage) {
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	dbPath, ok := os.LookupEnv("DB_PATH")
+	if !ok {
+		dbPath = "./db"
+		log.Println("Using db at " + dbPath)
+	}
 
-	client, err := getGoogleClient()
+	db, err := sql.Open("sqlite3", dbPath + "/db.sqlite3")
 	if err != nil {
 		log.Panic(err)
 	}
 
-	storage := NewStorage(client)
+	storage := NewStorage(db)
 
-	bot, err := NewBot(storage, PikabuFetcher{})
+	bot, err := NewBot(storage, FreeGameFindingsFetcher{})
 	if err != nil {
 		log.Panic(err)
 	}
