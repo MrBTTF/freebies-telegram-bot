@@ -1,8 +1,5 @@
-FROM alpine:latest
+FROM scratch
 
-COPY main /
-COPY keys /keys
+COPY build/app /usr/bin/app
 
-EXPOSE 8080
-
-CMD ["./main"]
+ENTRYPOINT [ "/usr/bin/app" ]

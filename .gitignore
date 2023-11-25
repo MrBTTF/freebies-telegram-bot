@@ -1,3 +1,4 @@
 keys/*.json
 keys/*.txt
-main
+build/*
+db/*.sqlite3

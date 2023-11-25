@@ -1,0 +1,25 @@
+INSERT  INTO subscribers(chat_id, last_post)
+VALUES
+(275919526, datetime()),
+(399217602, datetime()),
+(-212743202, datetime()),
+(705325504, datetime()),
+(373748538, datetime()),
+(985160518, datetime()),
+(255229753, datetime()),
+(587707240, datetime()),
+(293626786, datetime()),
+(323215819, datetime()),
+(760825160, datetime()),
+(361816210, datetime()),
+(194079307, datetime()),
+(-1001504949251, datetime()),
+(65901887, datetime()),
+(189547732, datetime()),
+(1369068134, datetime()),
+(250661596, datetime()),
+(865223280, datetime()),
+(69470674, datetime()),
+(5029016774, datetime()),
+(155118911, datetime())
+;
