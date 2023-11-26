@@ -20,7 +20,7 @@ func Test_EpicGamesFetcher(t *testing.T) {
 
 func Test_FreeGameFindingsFetcher(t *testing.T) {
 	fetcher := FreeGameFindingsFetcher{}
-	sinceTime := time.Now().Add(24 * 3 * time.Hour)
+	sinceTime := time.Now().UTC().Add(-24 * 3 * time.Hour)
 	links, err := fetcher.Fetch(sinceTime)
 	if err != nil {
 		log.Fatalf("status code error: %s", err.Error())

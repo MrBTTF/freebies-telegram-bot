@@ -16,8 +16,13 @@ var (
 	ApiToken string
 )
 
+type Link struct {
+	link string
+	date time.Time
+}
+
 type LinksFetcher interface {
-	Fetch(time.Time) ([]string, error)
+	Fetch(time.Time) ([]Link, error)
 }
 
 type Bot struct {
@@ -120,7 +125,18 @@ func (b *Bot) WatchNewPosts() {
 		}
 		now := time.Now().UTC()
 
-		//TODO: read posts since the earlierst last_post of a user
+		earlierstLastPost := now
+		for _, s := range subscribers {
+			if earlierstLastPost.After(s.LastPost) {
+				earlierstLastPost = s.LastPost
+			}
+		}
+		allLinks, err := b.links.Fetch(earlierstLastPost)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		log.Printf("Fetched %d posts in total", len(allLinks))
 
 		var wg sync.WaitGroup
 		for _, s := range subscribers {
@@ -129,7 +145,7 @@ func (b *Bot) WatchNewPosts() {
 			go func() {
 				defer wg.Done()
 
-				links, err := b.links.Fetch(s.LastPost)
+				links := getLinksAfter(allLinks, s.LastPost)
 				if err != nil {
 					log.Println(err)
 					return
@@ -138,7 +154,7 @@ func (b *Bot) WatchNewPosts() {
 					b.SendMsg(s.ChatID, "Just found some new freebies for you 😉")
 				}
 				for _, link := range links {
-					b.SendMsg(s.ChatID, link)
+					b.SendMsg(s.ChatID, link.link)
 				}
 				log.Printf("%d posts send to subscriber: %d", len(links), s.ChatID)
 				if len(links) != 0 {
@@ -186,7 +202,18 @@ func (b *Bot) SendPostsToUser(chatID int64, sinceDays int) {
 		b.SendMsg(chatID, "Here are some freebies for you 😉")
 	}
 	for _, link := range links {
-		b.SendMsg(chatID, link)
+		b.SendMsg(chatID, link.link)
 	}
 	log.Printf("%d posts send to subscriber: %d", len(links), chatID)
+}
+
+func getLinksAfter(links []Link, date time.Time) []Link {
+	result := make([]Link, 0, len(links))
+	for _, link := range links {
+		if link.date.After(date) {
+			result = append(result, link)
+		}
+	}
+
+	return result
 }

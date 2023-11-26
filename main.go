@@ -14,9 +14,8 @@ import (
 var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 func setupServer(bot *Bot, storage *Storage) {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Println("Pinged")
-		fmt.Fprintf(w, "Hehehe")
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "OK")
 	})
 
 	http.HandleFunc("/send", func(w http.ResponseWriter, r *http.Request) {
@@ -68,13 +67,13 @@ func main() {
 	dbPath, ok := os.LookupEnv("DB_PATH")
 	if !ok {
 		dbPath = "./db"
-		log.Println("Using db at " + dbPath)
 	}
 
-	db, err := sql.Open("sqlite3", dbPath + "/db.sqlite3")
+	db, err := sql.Open("sqlite3", dbPath+"/db.sqlite3")
 	if err != nil {
 		log.Panic(err)
 	}
+	log.Println("Using db at " + dbPath)
 
 	storage := NewStorage(db)
 

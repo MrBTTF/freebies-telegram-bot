@@ -20,12 +20,13 @@ const (
 type FreeGameFindingsFetcher struct {
 }
 
-func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) ([]string, error) {
+func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) ([]Link, error) {
 	client := &http.Client{}
 	client.Transport = cloudflarebp.AddCloudFlareByPass(client.Transport)
+
 	res, err := client.Get(FREE_GAME_FINDINGS_URL)
 	if err != nil {
-		return []string{}, err
+		return []Link{}, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
@@ -34,17 +35,15 @@ func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) ([]string, error) {
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
-		return []string{}, err
+		return []Link{}, err
 	}
 
-	links := []string{}
+	links := []Link{}
 	doc.
 		Find("div#siteTable > :not(.promotedlink, .linkflair-modpost, .linkflair-Expired)").
 		Children().
 		Find(".top-matter").
 		EachWithBreak(func(i int, div *goquery.Selection) bool {
-			fmt.Println("Game:")
-
 			tagline := div.Find("p.tagline")
 			datetime, _ := tagline.Find("time").Attr("datetime")
 
@@ -56,12 +55,13 @@ func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) ([]string, error) {
 			if !date.UTC().After(sinceTime) {
 				return false
 			}
+			fmt.Println("Game:")
 			fmt.Println(date)
 
 			title := div.Find("p.title")
 			href, _ := title.Find("a").Attr("href")
 
-			links = append(links, href)
+			links = append(links, Link{href, date})
 
 			return true
 		})
