@@ -7,11 +7,19 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 )
 
 var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
+var markdownRe = regexp.MustCompile(`([!\(\).])`)
+
+func sendMessage(bot *Bot, chatId int, message string) error {
+	log.Println("Message sent to ", chatId)
+	message = markdownRe.ReplaceAllString(message, `\$1`)
+	return bot.SendMsgWithMarkdown(int64(chatId), message)
+}
 
 func setupServer(bot *Bot, storage *Storage) {
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -32,8 +40,25 @@ func setupServer(bot *Bot, storage *Storage) {
 				w.Write([]byte(err.Error()))
 				return
 			}
-			log.Println("Message sent to ", chatID)
-			bot.SendMsg(int64(chatID), message)
+			if chatID == -1 {
+				subscribers, err := storage.ReadSubscribers()
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					w.Write([]byte(err.Error()))
+					return
+				}
+				for _, s := range subscribers {
+					err = sendMessage(bot, int(s.ChatID), message)
+					if err != nil {
+						log.Printf("Unable to send message to %d:%s\n", s.ChatID, err.Error())
+					}
+				}
+			} else {
+				err = sendMessage(bot, int(chatID), message)
+				if err != nil {
+					log.Printf("Unable to send message to %d:%s\n", chatID, err.Error())
+				}
+			}
 			return
 		}
 
