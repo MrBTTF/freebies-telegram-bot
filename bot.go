@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 var (
@@ -52,10 +52,7 @@ func (b *Bot) Run() {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
-	updates, err := b.botApi.GetUpdatesChan(u)
-	if err != nil {
-		log.Panic(err)
-	}
+	updates := b.botApi.GetUpdatesChan(u)
 
 	for update := range updates {
 		if update.Message == nil { // ignore any non-Message Updates
@@ -67,7 +64,7 @@ func (b *Bot) Run() {
 
 		switch update.Message.Command() {
 		case "start":
-			err = b.storage.StoreSubscriber(chatID, now)
+			err := b.storage.StoreSubscriber(chatID, now)
 			if err != nil {
 				log.Println(err)
 			}
@@ -108,7 +105,7 @@ func (b *Bot) Run() {
 			}
 		case "":
 		default:
-			err = b.SendMsgWithMarkdown(update.Message.Chat.ID, "Unknown command 🧐\\. Type _*/*_")
+			err := b.SendMsgWithMarkdown(update.Message.Chat.ID, "Unknown command 🧐\\. Type _*/*_")
 			if err != nil {
 				log.Println(err)
 			}
