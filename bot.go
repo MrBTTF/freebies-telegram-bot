@@ -50,7 +50,7 @@ func NewBot(storage *Storage, links LinksFetcher) (*Bot, error) {
 
 func (b *Bot) Run() {
 	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
+	u.Timeout = 60*5
 
 	updates := b.botApi.GetUpdatesChan(u)
 
@@ -128,16 +128,21 @@ func (b *Bot) WatchNewPosts() {
 				earlierstLastPost = s.LastPost
 			}
 		}
+
 		allLinks, err := b.links.Fetch(earlierstLastPost)
 		if err != nil {
 			log.Println(err)
-			return
+			continue
 		}
-		log.Printf("Fetched %d posts in total", len(allLinks))
+		log.Printf("Fetched %d posts in total for %s", len(allLinks), earlierstLastPost.String())
+
+		if len(allLinks) == 0 {
+			time.Sleep(time.Duration(rnd.Intn(60*4)+60) * time.Second)
+			continue
+		}
 
 		var wg sync.WaitGroup
 		for _, s := range subscribers {
-			s := s
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

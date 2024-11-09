@@ -26,7 +26,7 @@ func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) ([]Link, error) {
 
 	res, err := client.Get(FREE_GAME_FINDINGS_URL)
 	if err != nil {
-		return []Link{}, err
+		return []Link{}, fmt.Errorf("Error making request to Free Game Findings: %w", err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
@@ -35,7 +35,7 @@ func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) ([]Link, error) {
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
-		return []Link{}, err
+		return []Link{}, fmt.Errorf("Error reading response body from Free Game Findings: %w", err)
 	}
 
 	links := []Link{}
