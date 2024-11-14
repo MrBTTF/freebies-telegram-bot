@@ -174,13 +174,12 @@ func (b *Bot) WatchNewPosts() {
 					log.Println(err)
 					return
 				}
+				links = filterLinks(links)
+
 				if len(links) != 0 {
 					b.SendMsg(s.ChatID, "Just found some new freebies for you 😉")
 				}
 				for _, link := range links {
-					if skipLink(link.link) {
-						continue
-					}
 					b.SendMsg(s.ChatID, link.link)
 				}
 				log.Printf("%d posts send to subscriber: %d", len(links), s.ChatID)
@@ -258,7 +257,17 @@ var rules = map[string]func(link string) bool{
 	},
 }
 
-func skipLink(link string) bool {
+func filterLinks(links []Link) []Link {
+	for i, link := range links {
+		if linkSkipped(link.link) {
+			links = links[i+1:]
+			links = append(links[:i], links[i+1:]...)
+		}
+	}
+	return links
+}
+
+func linkSkipped(link string) bool {
 	for name, isAllowed := range rules {
 		if !isAllowed(link) {
 			fmt.Printf("Rule %s applied to link %s\n", name, link)
