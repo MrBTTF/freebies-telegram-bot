@@ -55,8 +55,8 @@ func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) ([]Link, error) {
 			if !date.UTC().After(sinceTime) {
 				return false
 			}
-			fmt.Println("Game:")
-			fmt.Println(date)
+			// fmt.Println("Game:")
+			// fmt.Println(date)
 
 			title := div.Find("p.title")
 			href, _ := title.Find("a").Attr("href")

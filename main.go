@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -22,6 +24,7 @@ func sendMessage(bot *Bot, chatId int, message string) error {
 }
 
 func setupServer(bot *Bot, storage *Storage) {
+	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "OK")
 	})

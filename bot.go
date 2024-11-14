@@ -4,11 +4,30 @@ import (
 	"database/sql"
 	_ "embed"
 	"errors"
+	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+var (
+	linksRequests = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "game_freebiess_links_requests",
+		Help: "The number of latest requests to fetch links",
+	})
+	freebieDeliveries = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "game_freebiess_freebie_deliveries",
+		Help: "The number of latest freebie links delivered to users",
+	})
+	currentSubscribers = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "game_freebiess_current_subscribers",
+		Help: "The current number of subscribers",
+	})
 )
 
 var (
@@ -50,7 +69,7 @@ func NewBot(storage *Storage, links LinksFetcher) (*Bot, error) {
 
 func (b *Bot) Run() {
 	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60*5
+	u.Timeout = 60 * 5
 
 	updates := b.botApi.GetUpdatesChan(u)
 
@@ -120,6 +139,8 @@ func (b *Bot) WatchNewPosts() {
 			log.Println(err)
 			continue
 		}
+		currentSubscribers.Set(float64(len(subscribers)))
+
 		now := time.Now().UTC()
 
 		earlierstLastPost := now
@@ -135,6 +156,7 @@ func (b *Bot) WatchNewPosts() {
 			continue
 		}
 		log.Printf("Fetched %d posts in total for %s", len(allLinks), earlierstLastPost.String())
+		linksRequests.Add(1)
 
 		if len(allLinks) == 0 {
 			time.Sleep(time.Duration(rnd.Intn(60*4)+60) * time.Second)
@@ -156,9 +178,13 @@ func (b *Bot) WatchNewPosts() {
 					b.SendMsg(s.ChatID, "Just found some new freebies for you 😉")
 				}
 				for _, link := range links {
+					if skipLink(link.link) {
+						continue
+					}
 					b.SendMsg(s.ChatID, link.link)
 				}
 				log.Printf("%d posts send to subscriber: %d", len(links), s.ChatID)
+				freebieDeliveries.Add(1)
 				if len(links) != 0 {
 					err = b.storage.UpdateLastPost(s.ChatID, now)
 					if err != nil {
@@ -218,4 +244,26 @@ func getLinksAfter(links []Link, date time.Time) []Link {
 	}
 
 	return result
+}
+
+var rules = map[string]func(link string) bool{
+	"skip_amazon": func(link string) bool {
+		return !strings.Contains(link, "amazon.com")
+	},
+	"skip_reddit": func(link string) bool {
+		return !strings.HasPrefix(link, "/r/")
+	},
+	"skip_x_com": func(link string) bool {
+		return !strings.HasPrefix(link, "https://x.com")
+	},
+}
+
+func skipLink(link string) bool {
+	for name, isAllowed := range rules {
+		if !isAllowed(link) {
+			fmt.Printf("Rule %s applied to link %s\n", name, link)
+			return false
+		}
+	}
+	return true
 }
