@@ -258,21 +258,21 @@ var rules = map[string]func(link string) bool{
 }
 
 func filterLinks(links []Link) []Link {
-	for i, link := range links {
-		if linkSkipped(link.link) {
-			links = links[i+1:]
-			links = append(links[:i], links[i+1:]...)
+	filteredLinks := []Link{}
+	for _, link := range links {
+		if isLinkAllowed(link.link) {
+			filteredLinks = append(filteredLinks, link)
 		}
 	}
-	return links
+	return filteredLinks
 }
 
-func linkSkipped(link string) bool {
+func isLinkAllowed(link string) bool {
 	for name, isAllowed := range rules {
-		if !isAllowed(link) {
+		if isAllowed(link) {
 			fmt.Printf("Rule %s applied to link %s\n", name, link)
-			return false
+			return true
 		}
 	}
-	return true
+	return false
 }
