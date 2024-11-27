@@ -269,10 +269,10 @@ func filterLinks(links []Link) []Link {
 
 func isLinkAllowed(link string) bool {
 	for name, isAllowed := range rules {
-		if isAllowed(link) {
-			fmt.Printf("Rule %s applied to link %s\n", name, link)
-			return true
+		if !isAllowed(link) {
+			fmt.Printf("Link %s is filtered by rule %s\n", link, name)
+			return false
 		}
 	}
-	return false
+	return true
 }
