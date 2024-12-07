@@ -17,15 +17,19 @@ import (
 
 var (
 	linksRequests = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "game_freebiess_links_requests",
+		Name: "game_freebies_links_requests",
 		Help: "The number of latest requests to fetch links",
 	})
+	fetchedRequests = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "game_freebies_links_fetched",
+		Help: "The number of fetched links",
+	})
 	freebieDeliveries = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "game_freebiess_freebie_deliveries",
+		Name: "game_freebies_freebie_deliveries",
 		Help: "The number of latest freebie links delivered to users",
 	})
 	currentSubscribers = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "game_freebiess_current_subscribers",
+		Name: "game_freebies_current_subscribers",
 		Help: "The current number of subscribers",
 	})
 )
@@ -150,13 +154,11 @@ func (b *Bot) WatchNewPosts() {
 			}
 		}
 
-		allLinks, err := b.links.Fetch(earlierstLastPost)
+		allLinks, err := b.fetchLinks(earlierstLastPost)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		log.Printf("Fetched %d posts in total for %s", len(allLinks), earlierstLastPost.String())
-		linksRequests.Add(1)
 
 		if len(allLinks) == 0 {
 			time.Sleep(time.Duration(rnd.Intn(60*4)+60) * time.Second)
@@ -176,20 +178,15 @@ func (b *Bot) WatchNewPosts() {
 				}
 				links = filterLinks(links)
 
-				if len(links) != 0 {
-					b.SendMsg(s.ChatID, "Just found some new freebies for you 😉")
+				if len(links) == 0 {
+					return
 				}
-				for _, link := range links {
-					b.SendMsg(s.ChatID, link.link)
-				}
-				log.Printf("%d posts send to subscriber: %d", len(links), s.ChatID)
-				freebieDeliveries.Add(1)
-				if len(links) != 0 {
-					err = b.storage.UpdateLastPost(s.ChatID, now)
-					if err != nil {
-						log.Println(err)
-						return
-					}
+				b.SendMsg(s.ChatID, "Just found some new freebies for you 😉")
+				b.sendLinks(s.ChatID, links)
+				err = b.storage.UpdateLastPost(s.ChatID, now)
+				if err != nil {
+					log.Println(err)
+					return
 				}
 
 			}()
@@ -215,7 +212,7 @@ func (b *Bot) SendMsgWithMarkdown(chatId int64, message string) error {
 
 func (b *Bot) SendPostsToUser(chatID int64, sinceDays int) {
 	sinceTime := time.Now().UTC().AddDate(0, 0, -sinceDays)
-	links, err := b.links.Fetch(sinceTime)
+	links, err := b.fetchLinks(sinceTime)
 	if err != nil {
 		log.Println(err)
 	}
@@ -227,11 +224,29 @@ func (b *Bot) SendPostsToUser(chatID int64, sinceDays int) {
 		}
 	} else {
 		b.SendMsg(chatID, "Here are some freebies for you 😉")
+		b.sendLinks(chatID, links)
 	}
+}
+
+func (b *Bot) fetchLinks(sinceTime time.Time) ([]Link, error) {
+	links, err := b.links.Fetch(sinceTime)
+	if err != nil {
+		return nil, err
+	}
+	linksRequests.Add(1)
+	if len(links) != 0 {
+		log.Printf("Fetched %d posts in total for %s", len(links), sinceTime.String())
+		fetchedRequests.Add(float64(len(links)))
+	}
+	return links, nil
+}
+
+func (b *Bot) sendLinks(chatId int64, links []Link) {
 	for _, link := range links {
-		b.SendMsg(chatID, link.link)
+		b.SendMsg(chatId, link.link)
 	}
-	log.Printf("%d posts send to subscriber: %d", len(links), chatID)
+	log.Printf("%d posts send to subscriber: %d", len(links), chatId)
+	freebieDeliveries.Add(float64(len(links)))
 }
 
 func getLinksAfter(links []Link, date time.Time) []Link {

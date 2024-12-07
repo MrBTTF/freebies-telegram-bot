@@ -13,6 +13,9 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+podAnnotations:
+  prometheus.io/scrape: "true"
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: false
