@@ -1,5 +1,4 @@
-keys/*.json
-keys/*.txt
+internal/bot/keys/*
 build/*
 db/*.sqlite3
 local/*

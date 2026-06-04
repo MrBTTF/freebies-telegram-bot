@@ -1,4 +1,4 @@
-package main
+package fetchers
 
 import (
 	"fmt"
@@ -16,6 +16,11 @@ const (
 	EPIC_GAMES_URL         = "https://beebom.com/epic-games-free-games-list/"
 	FREE_GAME_FINDINGS_URL = "https://old.reddit.com/r/FreeGameFindings/new/"
 )
+
+type Link struct {
+	Link string
+	Date time.Time
+}
 
 type FreeGameFindingsFetcher struct {
 }

@@ -4,26 +4,26 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"regexp"
 	"strconv"
-	"time"
 
+	"github.com/freebies-telegram-bot/internal/bot"
+	"github.com/freebies-telegram-bot/internal/db"
+	"github.com/freebies-telegram-bot/internal/fetchers"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 var markdownRe = regexp.MustCompile(`([!\(\).])`)
 
-func sendMessage(bot *Bot, chatId int, message string) error {
+func sendMessage(bot *bot.Bot, chatId int, message string) error {
 	log.Println("Message sent to ", chatId)
 	message = markdownRe.ReplaceAllString(message, `\$1`)
 	return bot.SendMsgWithMarkdown(int64(chatId), message)
 }
 
-func setupServer(bot *Bot, storage *Storage) {
+func setupServer(bot *bot.Bot, storage *db.Storage) {
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "OK")
@@ -97,15 +97,15 @@ func main() {
 		dbPath = "./db"
 	}
 
-	db, err := sql.Open("sqlite3", dbPath+"/db.sqlite3")
+	conn, err := sql.Open("sqlite3", dbPath+"/db.sqlite3")
 	if err != nil {
 		log.Panic(err)
 	}
 	log.Println("Using db at " + dbPath)
 
-	storage := NewStorage(db)
+	storage := db.NewStorage(conn)
 
-	bot, err := NewBot(storage, FreeGameFindingsFetcher{})
+	bot, err := bot.NewBot(storage, fetchers.FreeGameFindingsFetcher{})
 	if err != nil {
 		log.Panic(err)
 	}

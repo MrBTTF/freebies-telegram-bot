@@ -1,4 +1,4 @@
-package main
+package bot
 
 import (
 	"database/sql"
@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/freebies-telegram-bot/internal/db"
+	"github.com/freebies-telegram-bot/internal/fetchers"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -37,24 +40,21 @@ var (
 var (
 	//go:embed keys/telegram_token.txt
 	ApiToken string
+
+	rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
-type Link struct {
-	link string
-	date time.Time
-}
-
 type LinksFetcher interface {
-	Fetch(time.Time) ([]Link, error)
+	Fetch(time.Time) ([]fetchers.Link, error)
 }
 
 type Bot struct {
 	botApi  *tgbotapi.BotAPI
-	storage *Storage
+	storage *db.Storage
 	links   LinksFetcher
 }
 
-func NewBot(storage *Storage, links LinksFetcher) (*Bot, error) {
+func NewBot(storage *db.Storage, links LinksFetcher) (*Bot, error) {
 	bot, err := tgbotapi.NewBotAPI(ApiToken)
 	if err != nil {
 		return nil, err
@@ -228,7 +228,7 @@ func (b *Bot) SendPostsToUser(chatID int64, sinceDays int) {
 	}
 }
 
-func (b *Bot) fetchLinks(sinceTime time.Time) ([]Link, error) {
+func (b *Bot) fetchLinks(sinceTime time.Time) ([]fetchers.Link, error) {
 	links, err := b.links.Fetch(sinceTime)
 	if err != nil {
 		return nil, err
@@ -241,18 +241,18 @@ func (b *Bot) fetchLinks(sinceTime time.Time) ([]Link, error) {
 	return links, nil
 }
 
-func (b *Bot) sendLinks(chatId int64, links []Link) {
+func (b *Bot) sendLinks(chatId int64, links []fetchers.Link) {
 	for _, link := range links {
-		b.SendMsg(chatId, link.link)
+		b.SendMsg(chatId, link.Link)
 	}
 	log.Printf("%d posts send to subscriber: %d", len(links), chatId)
 	freebieDeliveries.Add(float64(len(links)))
 }
 
-func getLinksAfter(links []Link, date time.Time) []Link {
-	result := make([]Link, 0, len(links))
+func getLinksAfter(links []fetchers.Link, date time.Time) []fetchers.Link {
+	result := make([]fetchers.Link, 0, len(links))
 	for _, link := range links {
-		if link.date.After(date) {
+		if link.Date.After(date) {
 			result = append(result, link)
 		}
 	}
@@ -272,10 +272,10 @@ var rules = map[string]func(link string) bool{
 	},
 }
 
-func filterLinks(links []Link) []Link {
-	filteredLinks := []Link{}
+func filterLinks(links []fetchers.Link) []fetchers.Link {
+	filteredLinks := []fetchers.Link{}
 	for _, link := range links {
-		if isLinkAllowed(link.link) {
+		if isLinkAllowed(link.Link) {
 			filteredLinks = append(filteredLinks, link)
 		}
 	}
