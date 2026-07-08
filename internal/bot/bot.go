@@ -45,7 +45,7 @@ var (
 )
 
 type LinksFetcher interface {
-	Fetch(time.Time) ([]fetchers.Link, error)
+	Fetch(time.Time) (fetchers.Fetch, error)
 }
 
 type Bot struct {
@@ -154,13 +154,13 @@ func (b *Bot) WatchNewPosts() {
 			}
 		}
 
-		allLinks, err := b.fetchLinks(earlierstLastPost)
+		fetch, err := b.fetchLinks(earlierstLastPost)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
 
-		if len(allLinks) == 0 {
+		if len(fetch.Links) == 0 {
 			time.Sleep(time.Duration(rnd.Intn(60*4)+60) * time.Second)
 			continue
 		}
@@ -171,18 +171,18 @@ func (b *Bot) WatchNewPosts() {
 			go func() {
 				defer wg.Done()
 
-				links := getLinksAfter(allLinks, s.LastPost)
+				links := getLinksAfter(fetch.Links, s.LastPost)
 				if err != nil {
 					log.Println(err)
 					return
 				}
-				links = filterLinks(links)
+				links = b.filterLinks(s.ChatID, fetch.Id, links)
 
 				if len(links) == 0 {
 					return
 				}
 				b.SendMsg(s.ChatID, "Just found some new freebies for you 😉")
-				b.sendLinks(s.ChatID, links)
+				b.sendLinks(s.ChatID, fetch.Id, links)
 				err = b.storage.UpdateLastPost(s.ChatID, now)
 				if err != nil {
 					log.Println(err)
@@ -212,11 +212,11 @@ func (b *Bot) SendMsgWithMarkdown(chatId int64, message string) error {
 
 func (b *Bot) SendPostsToUser(chatID int64, sinceDays int) {
 	sinceTime := time.Now().UTC().AddDate(0, 0, -sinceDays)
-	links, err := b.fetchLinks(sinceTime)
+	fetch, err := b.fetchLinks(sinceTime)
 	if err != nil {
 		log.Println(err)
 	}
-	if len(links) == 0 {
+	if len(fetch.Links) == 0 {
 		if sinceDays == 0 {
 			b.SendMsg(chatID, "No freebies for today 😕")
 		} else {
@@ -224,29 +224,70 @@ func (b *Bot) SendPostsToUser(chatID int64, sinceDays int) {
 		}
 	} else {
 		b.SendMsg(chatID, "Here are some freebies for you 😉")
-		b.sendLinks(chatID, links)
+		b.sendLinks(chatID, fetch.Id, fetch.Links)
 	}
 }
 
-func (b *Bot) fetchLinks(sinceTime time.Time) ([]fetchers.Link, error) {
-	links, err := b.links.Fetch(sinceTime)
+func (b *Bot) fetchLinks(sinceTime time.Time) (fetchers.Fetch, error) {
+	fetch, err := b.links.Fetch(sinceTime)
 	if err != nil {
-		return nil, err
+		return fetchers.Fetch{}, err
 	}
 	linksRequests.Add(1)
-	if len(links) != 0 {
-		log.Printf("Fetched %d posts in total for %s", len(links), sinceTime.String())
-		fetchedRequests.Add(float64(len(links)))
+	if len(fetch.Links) != 0 {
+		log.Printf("Fetched %d posts in total for %s", len(fetch.Links), sinceTime.String())
+		fetchedRequests.Add(float64(len(fetch.Links)))
 	}
-	return links, nil
+	return fetch, nil
 }
 
-func (b *Bot) sendLinks(chatId int64, links []fetchers.Link) {
+func (b *Bot) sendLinks(chatId, fetchId int64, links []fetchers.Link) {
 	for _, link := range links {
 		b.SendMsg(chatId, link.Link)
 	}
 	log.Printf("%d posts send to subscriber: %d", len(links), chatId)
 	freebieDeliveries.Add(float64(len(links)))
+}
+
+func (b *Bot) filterLinks(chatId, fetchId int64, links []fetchers.Link) []fetchers.Link {
+	filteredLinks := []fetchers.Link{}
+	for _, link := range links {
+		if !isLinkAllowed(link.Link) {
+			continue
+		}
+		delivered, err := b.checkIfPostDelivered(chatId, link.Link, fetchId)
+		if err != nil {
+			log.Printf("Failed to check post for delivery for chatId '%d', link '%s': %s", fetchId, link.Link, err.Error())
+		}
+		if delivered {
+			continue
+		}
+
+		filteredLinks = append(filteredLinks, link)
+	}
+	return filteredLinks
+}
+
+func (b *Bot) checkIfPostDelivered(chatId int64, link string, fetchId int64) (bool, error) {
+	post, err := b.storage.GetPostByLink(link)
+	if err != nil {
+		return false, fmt.Errorf("Failed to get post post for fetch id '%d', link '%s': %w", fetchId, link, err)
+	}
+
+	deliveredPost, err := b.storage.GetDeliveredPost(post.Id)
+	if err == nil {
+		log.Printf("Skipping post, already delivered for post id '%d', chat id '%d', link '%s' on delivery date %s", post.Id, chatId, link, deliveredPost.DeliveryDate.String())
+		return true, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return false, fmt.Errorf("Failed to get post delivered post for fetch id '%d', chatId '%d': %w", fetchId, chatId, err)
+	}
+
+	err = b.storage.StoreDeliveredPost(post.Id, chatId)
+	if err != nil {
+		return false, fmt.Errorf("Failed to store delivered post for fetch id '%d', chatId '%d': %w", fetchId, chatId, err)
+	}
+
+	return false, nil
 }
 
 func getLinksAfter(links []fetchers.Link, date time.Time) []fetchers.Link {
@@ -270,16 +311,6 @@ var rules = map[string]func(link string) bool{
 	"skip_x_com": func(link string) bool {
 		return !strings.HasPrefix(link, "https://x.com")
 	},
-}
-
-func filterLinks(links []fetchers.Link) []fetchers.Link {
-	filteredLinks := []fetchers.Link{}
-	for _, link := range links {
-		if isLinkAllowed(link.Link) {
-			filteredLinks = append(filteredLinks, link)
-		}
-	}
-	return filteredLinks
 }
 
 func isLinkAllowed(link string) bool {

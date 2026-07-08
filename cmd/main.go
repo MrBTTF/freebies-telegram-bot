@@ -12,7 +12,10 @@ import (
 	"github.com/freebies-telegram-bot/internal/bot"
 	"github.com/freebies-telegram-bot/internal/db"
 	"github.com/freebies-telegram-bot/internal/fetchers"
+	"github.com/freebies-telegram-bot/internal/worker"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	_ "modernc.org/sqlite"
 )
 
 var markdownRe = regexp.MustCompile(`([!\(\).])`)
@@ -97,7 +100,7 @@ func main() {
 		dbPath = "./db"
 	}
 
-	conn, err := sql.Open("sqlite3", dbPath+"/db.sqlite3")
+	conn, err := sql.Open("sqlite", dbPath+"/db.sqlite3?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		log.Panic(err)
 	}
@@ -105,13 +108,17 @@ func main() {
 
 	storage := db.NewStorage(conn)
 
-	bot, err := bot.NewBot(storage, fetchers.FreeGameFindingsFetcher{})
+	bot, err := bot.NewBot(storage, fetchers.NewFreeGameFindingsFetcher(storage))
 	if err != nil {
 		log.Panic(err)
 	}
 
 	go setupServer(bot, storage)
 	go bot.WatchNewPosts()
+	go worker.CleanLogs()
+
+	for {
+	}
 
 	bot.Run()
 }

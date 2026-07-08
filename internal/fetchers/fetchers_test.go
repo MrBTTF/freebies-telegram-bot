@@ -7,24 +7,17 @@ import (
 	"time"
 )
 
-func Test_EpicGamesFetcher(t *testing.T) {
-	fetcher := EpicGamesFetcher{}
-	sinceTime := time.Now().Add(24 * 3 * time.Hour)
-	links, err := fetcher.Fetch(sinceTime)
-	if err != nil {
-		log.Fatalf("status code error: %s", err.Error())
-	}
-
-	_ = links
-}
+// TODO: Setup tests
+// Add tests/reddit.html with snapshot of reddit page
+// Add tests/db.sqlite3 with test data: subscribers, links, posts
+// or create migrations in tests/ and create a fresh db for each test
 
 func Test_FreeGameFindingsFetcher(t *testing.T) {
 	fetcher := FreeGameFindingsFetcher{}
 	sinceTime := time.Now().UTC().Add(-24 * 3 * time.Hour)
-	links, err := fetcher.Fetch(sinceTime)
+	fetch, err := fetcher.Fetch(sinceTime)
 	if err != nil {
 		log.Fatalf("status code error: %s", err.Error())
 	}
-	fmt.Println(links)
-	_ = links
+	fmt.Println(fetch.Links)
 }

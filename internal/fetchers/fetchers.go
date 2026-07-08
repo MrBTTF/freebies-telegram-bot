@@ -1,7 +1,9 @@
 package fetchers
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sort"
@@ -9,6 +11,7 @@ import (
 
 	cloudflarebp "github.com/DaRealFreak/cloudflare-bp-go"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/freebies-telegram-bot/internal/db"
 )
 
 const (
@@ -17,30 +20,89 @@ const (
 	FREE_GAME_FINDINGS_URL = "https://old.reddit.com/r/FreeGameFindings/new/"
 )
 
+type Fetch struct {
+	Id    int64
+	Links []Link
+}
+
 type Link struct {
-	Link string
-	Date time.Time
+	Link  string
+	Title string
+	Date  time.Time
 }
 
 type FreeGameFindingsFetcher struct {
+	storage *db.Storage
 }
 
-func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) ([]Link, error) {
+func NewFreeGameFindingsFetcher(storage *db.Storage) FreeGameFindingsFetcher {
+	return FreeGameFindingsFetcher{
+		storage,
+	}
+}
+
+func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) (Fetch, error) {
+	fetchId, err := f.storage.StoreFetch()
+	if err != nil {
+		return Fetch{}, fmt.Errorf("Error storing a fetch: %w", err)
+	}
+
 	client := &http.Client{}
 	client.Transport = cloudflarebp.AddCloudFlareByPass(client.Transport)
 
-	res, err := client.Get(FREE_GAME_FINDINGS_URL)
+	req, err := http.NewRequest("GET", FREE_GAME_FINDINGS_URL, nil)
 	if err != nil {
-		return []Link{}, fmt.Errorf("Error making request to Free Game Findings: %w", err)
+		if err := f.storage.StoreError(fetchId, err.Error()); err != nil {
+			return Fetch{}, fmt.Errorf("Error storing error for fetch '%d': %w", fetchId, err)
+		}
+		return Fetch{}, fmt.Errorf("Error making request: %w", err)
+	}
+
+	// Emulate a standard Chrome browser request
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Cache-Control", "max-age=0")
+	req.Header.Set("Sec-Ch-Ua", `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+
+	res, err := client.Do(req)
+	if err != nil {
+		if err := f.storage.StoreError(fetchId, err.Error()); err != nil {
+			return Fetch{}, fmt.Errorf("Error storing error for fetch '%d': %w", fetchId, err)
+		}
+		return Fetch{}, fmt.Errorf("Error making request to Free Game Findings: %w", err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
 		log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
 	}
 
-	doc, err := goquery.NewDocumentFromReader(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return []Link{}, fmt.Errorf("Error reading response body from Free Game Findings: %w", err)
+		return Fetch{}, fmt.Errorf("Error reading body: %w", err)
+	}
+
+	err = f.storage.StoreBody(fetchId, string(body))
+	if err != nil {
+		if err := f.storage.StoreError(fetchId, err.Error()); err != nil {
+			return Fetch{}, fmt.Errorf("Error storing error for fetch '%d': %w", fetchId, err)
+		}
+		return Fetch{}, fmt.Errorf("Error storing body for fetch '%d': %w", fetchId, err)
+	}
+
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+	if err != nil {
+		if err := f.storage.StoreError(fetchId, err.Error()); err != nil {
+			return Fetch{}, fmt.Errorf("Error storing error for fetch '%d': %w", fetchId, err)
+		}
+		return Fetch{}, fmt.Errorf("Error reading response body from Free Game Findings: %w", err)
 	}
 
 	links := []Link{}
@@ -66,11 +128,17 @@ func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) ([]Link, error) {
 			title := div.Find("p.title")
 			href, _ := title.Find("a").Attr("href")
 
-			links = append(links, Link{href, date})
+			link := Link{href, "", date}
+			links = append(links, link)
+
+			err = f.storage.StorePost(fetchId, link.Link, link.Title, link.Date)
+			if err != nil {
+				log.Println(err)
+			}
 
 			return true
 		})
-	return links, nil
+	return Fetch{fetchId, links}, nil
 }
 
 type EpicGamesFetcher struct {

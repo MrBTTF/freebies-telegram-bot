@@ -1,5 +1,27 @@
-CREATE TABLE `subscribers` (
+CREATE TABLE IF NOT EXISTS `subscribers` (
     `id` INTEGER PRIMARY KEY AUTOINCREMENT,
     `chat_id` INTEGER NOT NULL,
     `last_post` TEXT NULL
+);
+
+CREATE TABLE IF NOT EXISTS `fetch_logs` (
+    `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+    'created_at' DATETIME DEFAULT CURRENT_TIMESTAMP,
+    'body' TEXT NULL, 
+    'error' TEXT NULL
+);
+
+CREATE TABLE IF NOT EXISTS `posts` (
+    `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+    `fetch_id` INTEGER NOT NULL,
+    'link' TEXT NOT NULL UNIQUE,
+    'title' TEXT NULL,
+    'posted_at' DATETIME NOT NULL,
+    'created_at' DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS `delivered_posts` (
+    `post_id` INTEGER NOT NULL,
+    'receiver' INTEGER NOT NULL,
+    'delivery_date' DATETIME DEFAULT CURRENT_TIMESTAMP
 );
