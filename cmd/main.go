@@ -100,7 +100,7 @@ func main() {
 		dbPath = "./db"
 	}
 
-	conn, err := sql.Open("sqlite", dbPath+"/db.sqlite3?_journal_mode=WAL&_busy_timeout=5000")
+	conn, err := sql.Open("sqlite", "file:"+dbPath+"/db.sqlite3?_journal_mode=WAL&_busy_timeout=10000")
 	if err != nil {
 		log.Panic(err)
 	}
@@ -116,9 +116,6 @@ func main() {
 	go setupServer(bot, storage)
 	go bot.WatchNewPosts()
 	go worker.CleanLogs()
-
-	for {
-	}
 
 	bot.Run()
 }

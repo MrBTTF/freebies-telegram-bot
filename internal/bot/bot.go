@@ -165,31 +165,31 @@ func (b *Bot) WatchNewPosts() {
 			continue
 		}
 
+		links := filterLinks(fetch.Links)
+
 		var wg sync.WaitGroup
 		for _, s := range subscribers {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 
-				links := getLinksAfter(fetch.Links, s.LastPost)
+				links = getLinksAfter(links, s.LastPost)
 				if err != nil {
 					log.Println(err)
 					return
 				}
-				links = b.filterLinks(s.ChatID, fetch.Id, links)
+				links = b.filterDeliveredLinks(s.ChatID, fetch.Id, links)
 
 				if len(links) == 0 {
 					return
 				}
 				b.SendMsg(s.ChatID, "Just found some new freebies for you 😉")
-				b.sendLinks(s.ChatID, fetch.Id, links)
+				b.sendLinks(s.ChatID, links)
 				err = b.storage.UpdateLastPost(s.ChatID, now)
 				if err != nil {
 					log.Println(err)
 					return
 				}
 
-			}()
+			})
 		}
 		time.Sleep(time.Duration(rnd.Intn(60*4)+60) * time.Second)
 		wg.Wait()
@@ -224,7 +224,7 @@ func (b *Bot) SendPostsToUser(chatID int64, sinceDays int) {
 		}
 	} else {
 		b.SendMsg(chatID, "Here are some freebies for you 😉")
-		b.sendLinks(chatID, fetch.Id, fetch.Links)
+		b.sendLinks(chatID, fetch.Links)
 	}
 }
 
@@ -241,7 +241,7 @@ func (b *Bot) fetchLinks(sinceTime time.Time) (fetchers.Fetch, error) {
 	return fetch, nil
 }
 
-func (b *Bot) sendLinks(chatId, fetchId int64, links []fetchers.Link) {
+func (b *Bot) sendLinks(chatId int64, links []fetchers.Link) {
 	for _, link := range links {
 		b.SendMsg(chatId, link.Link)
 	}
@@ -249,12 +249,9 @@ func (b *Bot) sendLinks(chatId, fetchId int64, links []fetchers.Link) {
 	freebieDeliveries.Add(float64(len(links)))
 }
 
-func (b *Bot) filterLinks(chatId, fetchId int64, links []fetchers.Link) []fetchers.Link {
+func (b *Bot) filterDeliveredLinks(chatId, fetchId int64, links []fetchers.Link) []fetchers.Link {
 	filteredLinks := []fetchers.Link{}
 	for _, link := range links {
-		if !isLinkAllowed(link.Link) {
-			continue
-		}
 		delivered, err := b.checkIfPostDelivered(chatId, link.Link, fetchId)
 		if err != nil {
 			log.Printf("Failed to check post for delivery for chatId '%d', link '%s': %s", fetchId, link.Link, err.Error())
@@ -274,7 +271,7 @@ func (b *Bot) checkIfPostDelivered(chatId int64, link string, fetchId int64) (bo
 		return false, fmt.Errorf("Failed to get post post for fetch id '%d', link '%s': %w", fetchId, link, err)
 	}
 
-	deliveredPost, err := b.storage.GetDeliveredPost(post.Id)
+	deliveredPost, err := b.storage.GetDeliveredPost(post.Id, chatId)
 	if err == nil {
 		log.Printf("Skipping post, already delivered for post id '%d', chat id '%d', link '%s' on delivery date %s", post.Id, chatId, link, deliveredPost.DeliveryDate.String())
 		return true, nil
@@ -299,6 +296,16 @@ func getLinksAfter(links []fetchers.Link, date time.Time) []fetchers.Link {
 	}
 
 	return result
+}
+
+func filterLinks(links []fetchers.Link) []fetchers.Link {
+	filteredLinks := []fetchers.Link{}
+	for _, link := range links {
+		if isLinkAllowed(link.Link) {
+			filteredLinks = append(filteredLinks, link)
+		}
+	}
+	return filteredLinks
 }
 
 var rules = map[string]func(link string) bool{

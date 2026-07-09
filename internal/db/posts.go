@@ -72,11 +72,11 @@ func (s *Storage) StoreDeliveredPost(postId, receiver int64) error {
 
 const SelectDeliveredPostQuery = `
 SELECT post_id, receiver, delivery_date FROM delivered_posts
-WHERE post_id = ?
+WHERE post_id = ? AND receiver = ?
 `
 
-func (s *Storage) GetDeliveredPost(postId int64) (DeliveredPost, error) {
-	row := s.db.QueryRow(SelectDeliveredPostQuery, postId)
+func (s *Storage) GetDeliveredPost(postId, receiver int64) (DeliveredPost, error) {
+	row := s.db.QueryRow(SelectDeliveredPostQuery, postId, receiver)
 
 	var deliveredPost DeliveredPost
 	err := row.Scan(
