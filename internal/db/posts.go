@@ -51,10 +51,27 @@ func (s *Storage) GetPostByLink(link string) (Post, error) {
 	return post, nil
 }
 
+const DeletePostsQuery = `
+DELETE FROM posts WHERE created_at < ?
+`
+
+func (s *Storage) DeletePostsOlderThan(deadline time.Time) (int64, error) {
+	result, err := s.db.Exec(DeletePostsQuery, deadline)
+	if err != nil {
+		return 0, fmt.Errorf("Unable to delete posts older than %s: %w", deadline, err)
+	}
+
+	rowsDeleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("Unable to get affected rows for posts: %w", err)
+	}
+
+	return rowsDeleted, nil
+}
+
 type DeliveredPost struct {
 	PostId       int64
-	Link         string
-	Receiver     string
+	Receiver     int64
 	DeliveryDate time.Time
 }
 
@@ -89,4 +106,22 @@ func (s *Storage) GetDeliveredPost(postId, receiver int64) (DeliveredPost, error
 	}
 
 	return deliveredPost, nil
+}
+
+const DeleteDeliveredPostsQuery = `
+DELETE FROM delivered_posts WHERE delivery_date < ?
+`
+
+func (s *Storage) DeleteDeliveredPostsOlderThan(deadline time.Time) (int64, error) {
+	result, err := s.db.Exec(DeleteDeliveredPostsQuery, deadline)
+	if err != nil {
+		return 0, fmt.Errorf("Unable to delete delivered posts older than %s: %w", deadline, err)
+	}
+
+	rowsDeleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("Unable to get affected rows for delivered posts: %w", err)
+	}
+
+	return rowsDeleted, nil
 }

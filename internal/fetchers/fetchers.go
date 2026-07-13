@@ -9,7 +9,6 @@ import (
 	"sort"
 	"time"
 
-	cloudflarebp "github.com/DaRealFreak/cloudflare-bp-go"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/freebies-telegram-bot/internal/db"
 )
@@ -32,11 +31,15 @@ type Link struct {
 }
 
 type FreeGameFindingsFetcher struct {
-	storage *db.Storage
+	url        string
+	httpClient *http.Client
+	storage    *db.Storage
 }
 
-func NewFreeGameFindingsFetcher(storage *db.Storage) FreeGameFindingsFetcher {
+func NewFreeGameFindingsFetcher(url string, httpClient *http.Client, storage *db.Storage) FreeGameFindingsFetcher {
 	return FreeGameFindingsFetcher{
+		url,
+		httpClient,
 		storage,
 	}
 }
@@ -47,10 +50,7 @@ func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) (Fetch, error) {
 		return Fetch{}, fmt.Errorf("Error storing a fetch: %w", err)
 	}
 
-	client := &http.Client{}
-	client.Transport = cloudflarebp.AddCloudFlareByPass(client.Transport)
-
-	req, err := http.NewRequest("GET", FREE_GAME_FINDINGS_URL, nil)
+	req, err := http.NewRequest("GET", f.url, nil)
 	if err != nil {
 		if err := f.storage.StoreError(fetchId, err.Error()); err != nil {
 			return Fetch{}, fmt.Errorf("Error storing error for fetch '%d': %w", fetchId, err)
@@ -72,7 +72,7 @@ func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) (Fetch, error) {
 	req.Header.Set("Sec-Fetch-User", "?1")
 	req.Header.Set("Upgrade-Insecure-Requests", "1")
 
-	res, err := client.Do(req)
+	res, err := f.httpClient.Do(req)
 	if err != nil {
 		if err := f.storage.StoreError(fetchId, err.Error()); err != nil {
 			return Fetch{}, fmt.Errorf("Error storing error for fetch '%d': %w", fetchId, err)
@@ -81,7 +81,8 @@ func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) (Fetch, error) {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
+		return Fetch{}, fmt.Errorf("status code error: %d %s", res.StatusCode, res.Status)
+
 	}
 
 	body, err := io.ReadAll(res.Body)
@@ -138,16 +139,22 @@ func (f FreeGameFindingsFetcher) Fetch(sinceTime time.Time) (Fetch, error) {
 
 			return true
 		})
+
+	if len(links) == 0 {
+		err := f.storage.DeleteFetch(fetchId)
+		if err != nil {
+			log.Println(fmt.Errorf("Error deleting fetch id '%d': %w", fetchId, err))
+		}
+	}
 	return Fetch{fetchId, links}, nil
 }
 
 type EpicGamesFetcher struct {
+	httpClient *http.Client
 }
 
 func (f EpicGamesFetcher) Fetch(sinceTime time.Time) ([]string, error) {
-	client := &http.Client{}
-	client.Transport = cloudflarebp.AddCloudFlareByPass(client.Transport)
-	res, err := client.Get(EPIC_GAMES_URL)
+	res, err := f.httpClient.Get(EPIC_GAMES_URL)
 	if err != nil {
 		return []string{}, err
 	}
@@ -178,12 +185,11 @@ func (f EpicGamesFetcher) Fetch(sinceTime time.Time) ([]string, error) {
 }
 
 type PikabuFetcher struct {
+	httpClient *http.Client
 }
 
 func (pf PikabuFetcher) Fetch(sinceTime time.Time) ([]string, error) {
-	client := &http.Client{}
-	client.Transport = cloudflarebp.AddCloudFlareByPass(client.Transport)
-	res, err := client.Get(PIKABU_URL)
+	res, err := pf.httpClient.Get(PIKABU_URL)
 	if err != nil {
 		return []string{}, err
 	}

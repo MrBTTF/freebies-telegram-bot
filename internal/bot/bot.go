@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"database/sql"
 	_ "embed"
 	"errors"
@@ -136,8 +137,13 @@ func (b *Bot) Run() {
 	}
 }
 
-func (b *Bot) WatchNewPosts() {
+func (b *Bot) WatchNewPosts(ctx context.Context) {
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		subscribers, err := b.storage.ReadSubscribers()
 		if err != nil {
 			log.Println(err)

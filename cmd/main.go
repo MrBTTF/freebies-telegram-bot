@@ -1,13 +1,19 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"regexp"
 	"strconv"
+	"syscall"
+
+	cloudflarebp "github.com/DaRealFreak/cloudflare-bp-go"
+	"github.com/go-faster/errors"
 
 	"github.com/freebies-telegram-bot/internal/bot"
 	"github.com/freebies-telegram-bot/internal/db"
@@ -17,6 +23,8 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+const WeeklyCron = "0 0 0 * * 1"
 
 var markdownRe = regexp.MustCompile(`([!\(\).])`)
 
@@ -93,6 +101,17 @@ func setupServer(bot *bot.Bot, storage *db.Storage) {
 	}
 }
 
+func setupDB(dbPath string) (*sql.DB, error) {
+	conn, err := sql.Open("sqlite", "file:"+dbPath+"/db.sqlite3?_pragma=journal_mode(wal)&_pragma=busy_timeout(10000)")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open db connection")
+	}
+	conn.SetMaxOpenConns(4)
+	conn.SetMaxIdleConns(1)
+	log.Println("Using db at " + dbPath)
+	return conn, nil
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	dbPath, ok := os.LookupEnv("DB_PATH")
@@ -100,22 +119,39 @@ func main() {
 		dbPath = "./db"
 	}
 
-	conn, err := sql.Open("sqlite", "file:"+dbPath+"/db.sqlite3?_journal_mode=WAL&_busy_timeout=10000")
+	conn, err := setupDB(dbPath)
 	if err != nil {
 		log.Panic(err)
 	}
-	log.Println("Using db at " + dbPath)
+	defer conn.Close()
+
+	httpClient := &http.Client{}
+	httpClient.Transport = cloudflarebp.AddCloudFlareByPass(httpClient.Transport)
 
 	storage := db.NewStorage(conn)
 
-	bot, err := bot.NewBot(storage, fetchers.NewFreeGameFindingsFetcher(storage))
+	bot, err := bot.NewBot(storage, fetchers.NewFreeGameFindingsFetcher(fetchers.FREE_GAME_FINDINGS_URL, httpClient, storage))
 	if err != nil {
 		log.Panic(err)
 	}
 
+	logsCleaner, err := worker.NewLogsCleaner(storage)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	go setupServer(bot, storage)
-	go bot.WatchNewPosts()
-	go worker.CleanLogs()
+	go bot.WatchNewPosts(ctx)
+
+	if err = logsCleaner.Start(WeeklyCron); err != nil {
+		log.Panic(err)
+	}
 
 	bot.Run()
+
+	logsCleaner.Stop(ctx)
+
 }

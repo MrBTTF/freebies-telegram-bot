@@ -17,7 +17,6 @@ INSERT OR IGNORE INTO subscribers(chat_id, last_post) values(?,?)
 func (s *Storage) StoreSubscriber(chatId int64, sinceTime time.Time) error {
 	sinceTimeStr := sinceTime.Format(time.RFC3339)
 	_, err := s.db.Exec(InsertSubscriberQuery, chatId, sinceTimeStr)
-
 	if err != nil {
 		return fmt.Errorf("Unable to store last post %s for chat_id %d: %w", sinceTimeStr, chatId, err)
 	}
@@ -33,9 +32,8 @@ func (s *Storage) UpdateLastPost(chatId int64, sinceTime time.Time) error {
 	sinceTimeStr := sinceTime.Format(time.RFC3339)
 
 	_, err := s.db.Exec(UpdateLastPostQuery, sinceTimeStr, chatId)
-
 	if err != nil {
-		return fmt.Errorf("Unable to store last post %s for chat_id %d: %w", sinceTimeStr, chatId, err)
+		return fmt.Errorf("Unable to update last post %s for chat_id %d: %w", sinceTimeStr, chatId, err)
 	}
 
 	return nil
