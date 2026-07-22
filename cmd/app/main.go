@@ -34,7 +34,7 @@ func sendMessage(bot *bot.Bot, chatId int, message string) error {
 	return bot.SendMsgWithMarkdown(int64(chatId), message)
 }
 
-func setupServer(bot *bot.Bot, storage *db.Storage) {
+func setupServer(bot *bot.Bot, storage *db.SqliteStorage) {
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "OK")

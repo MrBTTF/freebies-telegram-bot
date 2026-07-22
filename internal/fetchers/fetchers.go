@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/freebies-telegram-bot/internal/db"
 )
 
 const (
@@ -30,13 +29,22 @@ type Link struct {
 	Date  time.Time
 }
 
+type FetchStorage interface {
+	StoreFetch() (int64, error)
+	StoreBody(fetchId int64, body string) error
+	StoreError(fetchId int64, errorStr string) error
+	DeleteFetch(id int64) error
+	DeleteFetchesOlderThan(deadline time.Time) (int64, error)
+	StorePost(fetch_id int64, link, title string, postedAt time.Time) error
+}
+
 type FreeGameFindingsFetcher struct {
 	url        string
 	httpClient *http.Client
-	storage    *db.Storage
+	storage    FetchStorage
 }
 
-func NewFreeGameFindingsFetcher(url string, httpClient *http.Client, storage *db.Storage) FreeGameFindingsFetcher {
+func NewFreeGameFindingsFetcher(url string, httpClient *http.Client, storage FetchStorage) FreeGameFindingsFetcher {
 	return FreeGameFindingsFetcher{
 		url,
 		httpClient,

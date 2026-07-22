@@ -5,19 +5,24 @@ import (
 	"log"
 	"time"
 
-	"github.com/freebies-telegram-bot/internal/db"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/go-faster/errors"
 )
 
 var FetchRetention = 30 * 24
 
-type LogsCleaner struct {
-	scheduler gocron.Scheduler
-	db        *db.Storage
+type LogsStorage interface {
+	DeleteFetchesOlderThan(deadline time.Time) (int64, error)
+	DeletePostsOlderThan(deadline time.Time) (int64, error)
+	DeleteDeliveredPostsOlderThan(deadline time.Time) (int64, error)
 }
 
-func NewLogsCleaner(db *db.Storage) (LogsCleaner, error) {
+type LogsCleaner struct {
+	scheduler gocron.Scheduler
+	db        LogsStorage
+}
+
+func NewLogsCleaner(db LogsStorage) (LogsCleaner, error) {
 	s, err := gocron.NewScheduler()
 	if err != nil {
 		return LogsCleaner{}, errors.Wrap(err, "failed to create cron scheduler")

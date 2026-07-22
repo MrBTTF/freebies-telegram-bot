@@ -27,21 +27,21 @@ import (
 var testRedditPage string
 
 var conn *sql.DB
-var storage *db.Storage
+var storage *db.SqliteStorage
 
 func TestMain(m *testing.M) {
 	var err error
-	conn, err = setupDB("../tests/")
+	conn, err = setupDB("../../tests/")
 	if err != nil {
 		log.Fatalf("test setup failed: %s", err.Error())
 	}
 	defer func() {
 		conn.Close()
-		os.Remove("../tests/db.sqlite3")
-		os.Remove("../tests/db.sqlite3-journal")
+		os.Remove("../../tests/db.sqlite3")
+		os.Remove("../../tests/db.sqlite3-journal")
 	}()
 
-	query, err := os.ReadFile("../db/migrations/create_tables.sql")
+	query, err := os.ReadFile("../../db/migrations/create_tables.sql")
 	if err != nil {
 		log.Fatalf("test setup failed: %s", err.Error())
 	}
@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("test teardown failed: %s", err.Error())
 	}
-	err = os.Remove("../tests/db.sqlite3")
+	err = os.Remove("../../tests/db.sqlite3")
 	if err != nil {
 		log.Fatalf("test teardown failed: %s", err.Error())
 	}

@@ -2,4 +2,4 @@
 
 set -Eeuo pipefail
 
-PORT=8080 go run cmd/app/main.go
+go run cmd/inspect/main.go ${@}

@@ -14,7 +14,7 @@ const InsertSubscriberQuery = `
 INSERT OR IGNORE INTO subscribers(chat_id, last_post) values(?,?)
 `
 
-func (s *Storage) StoreSubscriber(chatId int64, sinceTime time.Time) error {
+func (s *SqliteStorage) StoreSubscriber(chatId int64, sinceTime time.Time) error {
 	sinceTimeStr := sinceTime.Format(time.RFC3339)
 	_, err := s.db.Exec(InsertSubscriberQuery, chatId, sinceTimeStr)
 	if err != nil {
@@ -28,7 +28,7 @@ const UpdateLastPostQuery = `
 UPDATE subscribers SET last_post = ? where chat_id = ?
 `
 
-func (s *Storage) UpdateLastPost(chatId int64, sinceTime time.Time) error {
+func (s *SqliteStorage) UpdateLastPost(chatId int64, sinceTime time.Time) error {
 	sinceTimeStr := sinceTime.Format(time.RFC3339)
 
 	_, err := s.db.Exec(UpdateLastPostQuery, sinceTimeStr, chatId)
@@ -43,7 +43,7 @@ const DeleteSubscriberQuery = `
 DELETE FROM subscribers WHERE chat_id = ?
 `
 
-func (s *Storage) DeleteSubscriber(chatId int) error {
+func (s *SqliteStorage) DeleteSubscriber(chatId int) error {
 	_, err := s.db.Exec(DeleteSubscriberQuery, chatId)
 	if err != nil {
 		return fmt.Errorf("Unable to delete subscriber for chat_id %d: %w", chatId, err)
@@ -56,7 +56,7 @@ const SelectSubscribersQuery = `
 SELECT chat_id, last_post FROM subscribers
 `
 
-func (s *Storage) ReadSubscribers() ([]Subscriber, error) {
+func (s *SqliteStorage) ReadSubscribers() ([]Subscriber, error) {
 	rows, err := s.db.Query(SelectSubscribersQuery)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to read subscribers: %w", err)
@@ -85,7 +85,7 @@ SELECT chat_id, last_post FROM subscribers
 WHERE chat_id = ?
 `
 
-func (s *Storage) GetSubscriber(chatId int) (Subscriber, error) {
+func (s *SqliteStorage) GetSubscriber(chatId int) (Subscriber, error) {
 	row := s.db.QueryRow(SelectSubscriberQuery, chatId)
 	subscriber, err := scanSubscriber(row)
 	if err != nil {

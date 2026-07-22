@@ -19,7 +19,7 @@ INSERT INTO posts(fetch_id, link, title, posted_at) values(?,?,?,?)
 ON CONFLICT(link) DO NOTHING
 `
 
-func (s *Storage) StorePost(fetch_id int64, link, title string, postedAt time.Time) error {
+func (s *SqliteStorage) StorePost(fetch_id int64, link, title string, postedAt time.Time) error {
 	_, err := s.db.Exec(InsertPostQuery, fetch_id, link, title, postedAt)
 	if err != nil {
 		return fmt.Errorf("Unable to store post for fetch id '%d', link '%s': %w", fetch_id, link, err)
@@ -32,7 +32,7 @@ SELECT id, fetch_id, link, title, posted_at, created_at FROM posts
 WHERE link = ?
 `
 
-func (s *Storage) GetPostByLink(link string) (Post, error) {
+func (s *SqliteStorage) GetPostByLink(link string) (Post, error) {
 	row := s.db.QueryRow(SelectPostByLinkQuery, link)
 
 	var post Post
@@ -55,7 +55,7 @@ const DeletePostsQuery = `
 DELETE FROM posts WHERE created_at < ?
 `
 
-func (s *Storage) DeletePostsOlderThan(deadline time.Time) (int64, error) {
+func (s *SqliteStorage) DeletePostsOlderThan(deadline time.Time) (int64, error) {
 	result, err := s.db.Exec(DeletePostsQuery, deadline)
 	if err != nil {
 		return 0, fmt.Errorf("Unable to delete posts older than %s: %w", deadline, err)
@@ -79,7 +79,7 @@ const InsertDeliveriedPostQuery = `
 INSERT INTO delivered_posts(post_id, receiver) values(?,?)
 `
 
-func (s *Storage) StoreDeliveredPost(postId, receiver int64) error {
+func (s *SqliteStorage) StoreDeliveredPost(postId, receiver int64) error {
 	_, err := s.db.Exec(InsertDeliveriedPostQuery, postId, receiver)
 	if err != nil {
 		return fmt.Errorf("Unable to store delivered post for post id '%d', receiver '%d': %w", postId, receiver, err)
@@ -92,7 +92,7 @@ SELECT post_id, receiver, delivery_date FROM delivered_posts
 WHERE post_id = ? AND receiver = ?
 `
 
-func (s *Storage) GetDeliveredPost(postId, receiver int64) (DeliveredPost, error) {
+func (s *SqliteStorage) GetDeliveredPost(postId, receiver int64) (DeliveredPost, error) {
 	row := s.db.QueryRow(SelectDeliveredPostQuery, postId, receiver)
 
 	var deliveredPost DeliveredPost
@@ -112,7 +112,7 @@ const DeleteDeliveredPostsQuery = `
 DELETE FROM delivered_posts WHERE delivery_date < ?
 `
 
-func (s *Storage) DeleteDeliveredPostsOlderThan(deadline time.Time) (int64, error) {
+func (s *SqliteStorage) DeleteDeliveredPostsOlderThan(deadline time.Time) (int64, error) {
 	result, err := s.db.Exec(DeleteDeliveredPostsQuery, deadline)
 	if err != nil {
 		return 0, fmt.Errorf("Unable to delete delivered posts older than %s: %w", deadline, err)

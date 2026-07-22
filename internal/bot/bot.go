@@ -49,13 +49,24 @@ type LinksFetcher interface {
 	Fetch(time.Time) (fetchers.Fetch, error)
 }
 
+type BotStorage interface {
+	GetPostByLink(link string) (db.Post, error)
+	StoreDeliveredPost(postId, receiver int64) error
+	GetDeliveredPost(postId, receiver int64) (db.DeliveredPost, error)
+	StoreSubscriber(chatId int64, sinceTime time.Time) error
+	UpdateLastPost(chatId int64, sinceTime time.Time) error
+	DeleteSubscriber(chatId int) error
+	ReadSubscribers() ([]db.Subscriber, error)
+	GetSubscriber(chatId int) (db.Subscriber, error)
+}
+
 type Bot struct {
 	botApi  *tgbotapi.BotAPI
-	storage *db.Storage
+	storage BotStorage
 	links   LinksFetcher
 }
 
-func NewBot(storage *db.Storage, links LinksFetcher) (*Bot, error) {
+func NewBot(storage BotStorage, links LinksFetcher) (*Bot, error) {
 	bot, err := tgbotapi.NewBotAPI(ApiToken)
 	if err != nil {
 		return nil, err

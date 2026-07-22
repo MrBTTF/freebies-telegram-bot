@@ -10,12 +10,12 @@ type Scanable interface {
 	Scan(dest ...any) error
 }
 
-type Storage struct {
+type SqliteStorage struct {
 	db *sql.DB
 }
 
-func NewStorage(db *sql.DB) *Storage {
-	return &Storage{
+func NewStorage(db *sql.DB) *SqliteStorage {
+	return &SqliteStorage{
 		db: db,
 	}
 }
